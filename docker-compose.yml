@@ -1,0 +1,289 @@
+services:
+  # ============================================================
+  # 1. CAPA DE INFRAESTRUCTURA Y SERVICIOS BASE
+  # ============================================================
+  mysql:
+    image: mysql:8.4.4
+    container_name: nexusdesk-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ${NEXUSDESK_INIT_SQL:-./nexusdesk-backend/nexusdesk-database/init-databases.sql}:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4.0.7-management-alpine
+    container_name: nexusdesk-rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: techdesk
+      RABBITMQ_DEFAULT_PASS: techdesk123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # 2. SERVICIOS DE INFRAESTRUCTURA SPRING CLOUD
+  # ============================================================
+  eureka-server:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-eureka-server
+    container_name: nexusdesk-eureka
+    restart: always
+    ports:
+      - "8761:8761"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  api-gateway:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-api-gateway
+    container_name: nexusdesk-gateway
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - eureka-server
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ============================================================
+  # 3. MICROSERVICIOS DE NEGOCIO
+  # ============================================================
+  auth-service:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-auth-service
+    container_name: nexusdesk-auth
+    restart: always
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_auth?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  customer-service:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-customer-service
+    container_name: nexusdesk-customer
+    restart: always
+    ports:
+      - "8082:8082"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_customer?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  helpdesk-service:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-helpdesk-service
+    container_name: nexusdesk-helpdesk
+    restart: always
+    ports:
+      - "8083:8083"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_helpdesk?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: techdesk
+      SPRING_RABBITMQ_PASSWORD: techdesk123
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  operations-service:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-operations-service
+    container_name: nexusdesk-operations
+    restart: always
+    ports:
+      - "8084:8084"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_operations?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: techdesk
+      SPRING_RABBITMQ_PASSWORD: techdesk123
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  crm-service:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-crm-service
+    container_name: nexusdesk-crm
+    restart: always
+    ports:
+      - "8085:8085"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_crm?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: techdesk
+      SPRING_RABBITMQ_PASSWORD: techdesk123
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  billing-service:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-billing-service
+    container_name: nexusdesk-billing
+    restart: always
+    ports:
+      - "8086:8086"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_billing?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: techdesk
+      SPRING_RABBITMQ_PASSWORD: techdesk123
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  notification-service:
+    build:
+      context: ./nexusdesk-backend/nexusdesk-notification-service
+    container_name: nexusdesk-notification
+    restart: always
+    ports:
+      - "8087:8087"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_notification?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: techdesk
+      SPRING_RABBITMQ_PASSWORD: techdesk123
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ============================================================
+  # 4. CAPA DE PRESENTACIÓN SPA
+  # ============================================================
+  frontend:
+    build:
+      context: ./nexusdesk-frontend
+    container_name: nexusdesk-frontend
+    restart: always
+    ports:
+      - "4300:80"
+    depends_on:
+      - api-gateway
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+volumes:
+  mysql-data:
