@@ -1,0 +1,32 @@
+{
+  "id": "e4a2c5a0-9c2b-4d7a-8f6a-1b2c3d4e5f6a",
+  "name": "NexusDesk Local Environment",
+  "values": [
+    {
+      "key": "gateway_url",
+      "value": "http://localhost:8080",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "admin_username",
+      "value": "admin",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "admin_password",
+      "value": "Admin123*",
+      "type": "secret",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2026-10-23T18:15:00.000Z"
+}
