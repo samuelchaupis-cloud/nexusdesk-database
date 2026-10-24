@@ -1,29 +1,38 @@
+name: nexusdesk-pro-cloud
+
 services:
   # ============================================================
-  # 1. CAPA DE INFRAESTRUCTURA Y SERVICIOS BASE
+  # 1. CAPA DE INFRAESTRUCTURA BASE (PERFIL: infra, core, all)
   # ============================================================
   mysql:
     image: mysql:8.4.4
     container_name: nexusdesk-mysql
     restart: always
+    profiles: [infra, core, all]
     environment:
       MYSQL_ROOT_PASSWORD: root
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ${NEXUSDESK_INIT_SQL:-./nexusdesk-backend/nexusdesk-database/init-databases.sql}:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   rabbitmq:
     image: rabbitmq:4.0.7-management-alpine
     container_name: nexusdesk-rabbitmq
     restart: always
+    profiles: [infra, core, all]
     environment:
       RABBITMQ_DEFAULT_USER: techdesk
       RABBITMQ_DEFAULT_PASS: techdesk123
@@ -35,19 +44,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # ============================================================
-  # 2. SERVICIOS DE INFRAESTRUCTURA SPRING CLOUD
+  # 2. INFRAESTRUCTURA SPRING CLOUD (PERFIL: core, all)
   # ============================================================
   eureka-server:
     build:
       context: ./nexusdesk-backend/nexusdesk-eureka-server
+    image: nexusdesk-eureka-server:latest
     container_name: nexusdesk-eureka
     restart: always
+    profiles: [infra, core, all]
     ports:
       - "8761:8761"
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
     deploy:
       resources:
@@ -57,29 +73,34 @@ services:
   api-gateway:
     build:
       context: ./nexusdesk-backend/nexusdesk-api-gateway
+    image: nexusdesk-api-gateway:latest
     container_name: nexusdesk-gateway
     restart: always
+    profiles: [core, all]
     ports:
       - "8080:8080"
     depends_on:
-      - eureka-server
+      eureka-server:
+        condition: service_started
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
   # ============================================================
-  # 3. MICROSERVICIOS DE NEGOCIO
+  # 3. MICROSERVICIOS CORE (PERFIL: core, all)
   # ============================================================
   auth-service:
     build:
       context: ./nexusdesk-backend/nexusdesk-auth-service
+    image: nexusdesk-auth-service:latest
     container_name: nexusdesk-auth
     restart: always
+    profiles: [core, all]
     ports:
       - "8081:8081"
     depends_on:
@@ -88,7 +109,7 @@ services:
       eureka-server:
         condition: service_started
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_auth?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
       SPRING_DATASOURCE_USERNAME: root
@@ -97,13 +118,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
   customer-service:
     build:
       context: ./nexusdesk-backend/nexusdesk-customer-service
+    image: nexusdesk-customer-service:latest
     container_name: nexusdesk-customer
     restart: always
+    profiles: [core, all]
     ports:
       - "8082:8082"
     depends_on:
@@ -112,7 +135,7 @@ services:
       eureka-server:
         condition: service_started
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_customer?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
       SPRING_DATASOURCE_USERNAME: root
@@ -121,13 +144,18 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
+  # ============================================================
+  # 4. MICROSERVICIOS DE OPERACIONES Y NEGOCIO (PERFIL: all)
+  # ============================================================
   helpdesk-service:
     build:
       context: ./nexusdesk-backend/nexusdesk-helpdesk-service
+    image: nexusdesk-helpdesk-service:latest
     container_name: nexusdesk-helpdesk
     restart: always
+    profiles: [all]
     ports:
       - "8083:8083"
     depends_on:
@@ -138,7 +166,7 @@ services:
       eureka-server:
         condition: service_started
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_helpdesk?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
       SPRING_DATASOURCE_USERNAME: root
@@ -150,13 +178,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
   operations-service:
     build:
       context: ./nexusdesk-backend/nexusdesk-operations-service
+    image: nexusdesk-operations-service:latest
     container_name: nexusdesk-operations
     restart: always
+    profiles: [all]
     ports:
       - "8084:8084"
     depends_on:
@@ -167,7 +197,7 @@ services:
       eureka-server:
         condition: service_started
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_operations?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
       SPRING_DATASOURCE_USERNAME: root
@@ -179,13 +209,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
   crm-service:
     build:
       context: ./nexusdesk-backend/nexusdesk-crm-service
+    image: nexusdesk-crm-service:latest
     container_name: nexusdesk-crm
     restart: always
+    profiles: [all]
     ports:
       - "8085:8085"
     depends_on:
@@ -196,7 +228,7 @@ services:
       eureka-server:
         condition: service_started
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_crm?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
       SPRING_DATASOURCE_USERNAME: root
@@ -208,13 +240,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
   billing-service:
     build:
       context: ./nexusdesk-backend/nexusdesk-billing-service
+    image: nexusdesk-billing-service:latest
     container_name: nexusdesk-billing
     restart: always
+    profiles: [all]
     ports:
       - "8086:8086"
     depends_on:
@@ -225,7 +259,7 @@ services:
       eureka-server:
         condition: service_started
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_billing?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
       SPRING_DATASOURCE_USERNAME: root
@@ -237,13 +271,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
   notification-service:
     build:
       context: ./nexusdesk-backend/nexusdesk-notification-service
+    image: nexusdesk-notification-service:latest
     container_name: nexusdesk-notification
     restart: always
+    profiles: [all]
     ports:
       - "8087:8087"
     depends_on:
@@ -254,7 +290,7 @@ services:
       eureka-server:
         condition: service_started
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAM=256m -XX:MaxMetaspaceSize=80m -XX:+EnableDynamicAgentLoading"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75.0 -XX:MaxMetaspaceSize=160m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_notification?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
       SPRING_DATASOURCE_USERNAME: root
@@ -266,20 +302,23 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
   # ============================================================
-  # 4. CAPA DE PRESENTACIÓN SPA
+  # 5. CAPA DE PRESENTACIÓN SPA (ANGULAR + NGINX) (PERFIL: all)
   # ============================================================
   frontend:
     build:
       context: ./nexusdesk-frontend
+    image: nexusdesk-frontend:latest
     container_name: nexusdesk-frontend
     restart: always
+    profiles: [all]
     ports:
       - "4300:80"
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_started
     deploy:
       resources:
         limits:
@@ -287,3 +326,7 @@ services:
 
 volumes:
   mysql-data:
+
+networks:
+  default:
+    name: nexusdesk-network
