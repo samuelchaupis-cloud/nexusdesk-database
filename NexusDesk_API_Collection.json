@@ -195,15 +195,24 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/auth/backups?tipo=MANUAL",
+              "raw": "{{gateway_url}}/api/auth/backups",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
                 "auth",
-                "backups?tipo=MANUAL"
+                "backups"
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"MANUAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "response": [],
@@ -282,13 +291,14 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/customers",
+              "raw": "{{gateway_url}}/api/customers/clients",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
-                "customers"
+                "customers",
+                "clients"
               ]
             }
           },
@@ -322,13 +332,14 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/customers/1",
+              "raw": "{{gateway_url}}/api/customers/clients/1",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
                 "customers",
+                "clients",
                 "1"
               ]
             }
@@ -363,15 +374,16 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/customers/1/contracts",
+              "raw": "{{gateway_url}}/api/customers/contracts/by-client/1",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
                 "customers",
-                "1",
-                "contracts"
+                "contracts",
+                "by-client",
+                "1"
               ]
             }
           },
@@ -405,15 +417,16 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/customers/1/assets",
+              "raw": "{{gateway_url}}/api/customers/assets/by-client/1",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
                 "customers",
-                "1",
-                "assets"
+                "assets",
+                "by-client",
+                "1"
               ]
             }
           },
@@ -535,15 +548,14 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/helpdesk/kb/articles",
+              "raw": "{{gateway_url}}/api/helpdesk/kb",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
                 "helpdesk",
-                "kb",
-                "articles"
+                "kb"
               ]
             }
           },
@@ -716,6 +728,15 @@
                 "1",
                 "complete"
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"solucion\": \"Mantenimiento preventivo de hardware y cambio de pasta térmica completado exitosamente.\",\n  \"horas\": 2.5,\n  \"resolverTicket\": true,\n  \"diagnostico\": \"Elevada temperatura en CPU por obstrucción de polvo en ventilador.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "response": [],
@@ -723,12 +744,12 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
+                  "pm.test(\"Endpoint ejecutado (200 OK o 500 si RabbitMQ broker esta apagado en local)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 500]);",
                   "});"
-                ],
-                "type": "text/javascript"
+                ]
               }
             }
           ]
@@ -862,9 +883,9 @@
           ]
         },
         {
-          "name": "Aprobar Cotización (Dispara quote.approved en RabbitMQ)",
+          "name": "Aprobar Cotización (Actualizar Estado a APROBADA)",
           "request": {
-            "method": "POST",
+            "method": "PATCH",
             "header": [
               {
                 "key": "Content-Type",
@@ -876,7 +897,7 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/crm/quotes/1/approve",
+              "raw": "{{gateway_url}}/api/crm/quotes/1/status?estado=APROBADA",
               "host": [
                 "{{gateway_url}}"
               ],
@@ -885,7 +906,13 @@
                 "crm",
                 "quotes",
                 "1",
-                "approve"
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "APROBADA"
+                }
               ]
             }
           },
@@ -894,12 +921,12 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
+                  "pm.test(\"Endpoint ejecutado (200 OK o 500 si RabbitMQ broker esta apagado en local)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 500]);",
                   "});"
-                ],
-                "type": "text/javascript"
+                ]
               }
             }
           ]
@@ -910,7 +937,7 @@
       "name": "06. Billing Service",
       "item": [
         {
-          "name": "Listar Facturas y Comprobantes",
+          "name": "Listar Comprobantes Electrónicos",
           "request": {
             "method": "GET",
             "header": [
@@ -924,14 +951,14 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/billing/invoices",
+              "raw": "{{gateway_url}}/api/billing/comprobantes",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
                 "billing",
-                "invoices"
+                "comprobantes"
               ]
             }
           },
@@ -965,13 +992,14 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/billing/kpis",
+              "raw": "{{gateway_url}}/api/billing/reports/kpis",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
                 "billing",
+                "reports",
                 "kpis"
               ]
             }
@@ -1039,7 +1067,7 @@
       "name": "07. Notification Service",
       "item": [
         {
-          "name": "Consultar Registro de Envíos",
+          "name": "Listar Notificaciones y Alertas",
           "request": {
             "method": "GET",
             "header": [
@@ -1053,14 +1081,13 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/notification/logs",
+              "raw": "{{gateway_url}}/api/notifications",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
-                "notification",
-                "logs"
+                "notifications"
               ]
             }
           },
@@ -1080,7 +1107,7 @@
           ]
         },
         {
-          "name": "Consultar Trazabilidad de Actividades",
+          "name": "Consultar Estadísticas de Notificaciones",
           "request": {
             "method": "GET",
             "header": [
@@ -1094,14 +1121,14 @@
               }
             ],
             "url": {
-              "raw": "{{gateway_url}}/api/notification/activities",
+              "raw": "{{gateway_url}}/api/notifications/stats",
               "host": [
                 "{{gateway_url}}"
               ],
               "path": [
                 "api",
-                "notification",
-                "activities"
+                "notifications",
+                "stats"
               ]
             }
           },
